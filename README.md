@@ -5,7 +5,7 @@ Also STL files.
 
 The complete Instructable is at:
 
-xxxxxxxxxxxxxxxx
+https://www.instructables.com/ECG-With-PPG-Using-Arduino/
 
 I've included preliminary copies of the Instructable (as PDF) and the Arduino files here but they are not going to be updated. For the latest versions, see the Instructable.
 
