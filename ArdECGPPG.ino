@@ -2,6 +2,7 @@
 // Copyright 2023 Peter Balch
 //   displays an ECG and PPG
 //   computes QT interval
+//   computes PAT
 //-----------------------------------------------------------------------------
 
 #include <Arduino.h>
@@ -12,17 +13,19 @@
 // Defines
 //-----------------------------------------------------------------------------
 
-//#define bFakeECGoutput
 #define bHasPPG
 #define bHasPAT
 #define bHasQT
-//#define bDebug
-//#define bWindows
-//#define bFakeInput
+#define bHasChartMode
 
 #ifdef bHasPAT
 #define bHasPPG
 #endif
+
+//#define bDebug
+//#define bWindows
+//#define bFakeECGoutput
+//#define bFakeInput
 
 // get register bit - faster: doesn't turn it into 0/1
 #ifndef getBit
@@ -81,160 +84,24 @@ uint16_t CurBPM = 60;
   uint16_t CurQT = 360;
 #endif
 #ifdef bHasPAT
-  uint16_t CurPAT = 0;
+  float CurPAT = 0;
 #endif
 
-enum TMode { mdLargeECG, mdSmallECG, mdPoincare, mdBattery } mode = mdLargeECG;
+enum TMode { mdLargeECG, mdSmallECG,  mdPoincare, mdBattery } mode = mdLargeECG;
+
+bool SendingSerial = false;
+
+//---------------------------------------------------------------------------
 
 #ifdef bFakeInput
-//-----------------------------------------------------------------------------
-const uint8_t data[] PROGMEM = {
-  215, 232, 219, 187, 126, 94, 78, 85, 100, 105, 103, 101, 100, 101, 100, 100, 99, 99, 100, 102, 103,
-  103, 103, 102, 102, 103, 105, 106, 106, 106, 107, 109, 112, 113, 115, 117, 121, 122, 123, 123, 126, 129,
-  134, 136, 137, 137, 138, 140, 143, 142, 136, 132, 129, 127, 120, 114, 107, 107, 107, 105, 100, 98, 99,
-  98, 94, 93, 93, 95, 97, 97, 97, 97, 96, 95, 96, 97, 98, 97, 96, 96, 95, 95, 94, 95,
-  97, 98, 97, 96, 97, 98, 100, 101, 101, 101, 102, 102, 101, 99, 98, 98, 98, 98, 96, 95, 96,
-  96, 96, 96, 96, 97, 99, 100, 101, 102, 103, 104, 104, 104, 102, 101, 102, 103, 107, 108, 107, 105,
-  102, 100, 96, 93, 92, 93, 93, 93, 93, 93, 92, 90, 89, 90, 91, 90, 87, 87, 87, 85, 82,
-  89, 120, 153, 202, 223, 219, 190, 125, 89, 71, 80, 96, 97, 91, 88, 90, 91, 92, 92, 94, 95,
-  94, 94, 96, 98, 100, 101, 103, 104, 105, 104, 104, 105, 109, 111, 112, 112, 110, 111, 115, 120, 125,
-  127, 130, 133, 137, 140, 141, 142, 143, 143, 139, 137, 136, 136, 132, 126, 117, 114, 113, 112, 106, 102,
-  99, 99, 98, 96, 95, 94, 96, 96, 96, 96, 96, 95, 95, 94, 93, 91, 89, 89, 92, 94, 95,
-  95, 94, 95, 97, 96, 95, 94, 93, 93, 93, 92, 92, 92, 92, 92, 91, 91, 89, 88, 88, 88,
-  88, 87, 86, 85, 85, 85, 85, 86, 87, 86, 84, 83, 86, 88, 89, 87, 84, 84, 85, 85, 87,
-  91, 100, 106, 110, 111, 112, 113, 117, 120, 123, 124, 125, 125, 124, 123, 121, 119, 117, 116, 114, 114,
-  115, 115, 112, 110, 107, 107, 108, 109, 110, 109, 108, 108, 107, 104, 100, 100, 116, 139, 188, 223, 255,
-  249, 196, 149, 99, 91, 101, 109, 111, 111, 114, 115, 113, 111, 111, 113, 115, 114, 113, 112, 112, 112,
-  112, 113, 116, 117, 117, 116, 117, 117, 118, 119, 122, 124, 126, 127, 129, 132, 138, 142, 145, 146, 146,
-  148, 150, 151, 149, 147, 145, 143, 138, 132, 123, 119, 117, 114, 109, 105, 102, 101, 98, 96, 95, 96,
-  95, 93, 90, 90, 93, 93, 90, 88, 88, 91, 95, 95, 93, 91, 90, 91, 92, 93, 94, 93, 91,
-  91, 92, 93, 93, 92, 92, 92, 91, 90, 88, 88, 89, 90, 90, 89, 90, 92, 94, 95, 93, 90,
-  88, 89, 92, 93, 91, 90, 89, 89, 89, 88, 88, 88, 89, 89, 91, 93, 94, 93, 90, 90, 91,
-  92, 92, 92, 91, 92, 93, 94, 95, 95, 93, 92, 91, 93, 94, 94, 94, 95, 97, 97, 97, 97,
-  98, 99, 101, 103, 105, 107, 107, 107, 106, 106, 106, 105, 102, 99, 94, 93, 93, 94, 96, 97, 95,
-  94, 92, 91, 91, 91, 91, 91, 93, 94, 93, 91, 89, 92, 111, 135, 187, 220, 242, 226, 164, 119,
-  81, 78, 90, 96, 99, 101, 104, 105, 104, 103, 103, 104, 103, 104, 105, 106, 107, 106, 107, 106, 106,
-  106, 108, 110, 112, 113, 115, 118, 120, 121, 121, 123, 127, 130, 133, 135, 140, 143, 145, 147, 149, 150,
-  153, 153, 149, 144, 137, 135, 135, 133, 124, 117, 111, 111, 111, 108, 103, 102, 102, 102, 101, 99, 98,
-  98, 99, 98, 97, 97, 98, 100, 102, 100, 97, 96, 95, 96, 98, 99, 98, 97, 97, 100, 104, 105,
-  102, 99, 99, 101, 103, 103, 102, 101, 99, 98, 96, 96, 98, 100, 101, 99, 94, 93, 94, 95, 94,
-  93, 94, 95, 97, 98, 98, 97, 95, 93, 92, 94, 97, 97, 95, 93, 91, 90, 90, 91, 92, 94,
-  95, 95, 94, 93, 94, 96, 100, 101, 104, 106, 110, 112, 113, 114, 117, 118, 120, 120, 120, 121, 124,
-  126, 128, 130, 131, 131, 130, 128, 127, 127, 127, 125, 123, 123, 121, 119, 116, 115, 116, 115, 112, 110,
-  111, 113, 116, 116, 113, 111, 111, 111, 109, 106, 107, 117, 150, 181, 225, 239, 222, 186, 121, 93, 88,
-  98, 112, 114, 114, 115, 116, 115, 112, 111, 112, 113, 114, 113, 113, 113, 114, 114, 114, 114, 116, 118,
-  121, 122, 120, 118, 118, 119, 122, 124, 128, 132, 135, 136, 137, 139, 144, 146, 146, 145, 145, 147, 147,
-  146, 141, 137, 130, 126, 118, 114, 109, 106, 103, 100, 97, 96, 95, 92, 88, 86, 86, 87, 88, 87,
-  87, 87, 86, 85, 84, 85, 86, 87, 87, 86, 86, 87, 89, 90, 88, 87, 87, 90, 93, 94, 91,
-  89, 90, 91, 91, 90, 90, 91, 92, 91, 88, 87, 87, 87, 88, 89, 89, 88, 87, 86, 86, 85,
-  84, 85, 88, 90, 90, 88, 86, 87, 89, 90, 89, 88, 86, 86, 88, 90, 90, 87, 84, 84, 87,
-  90, 91, 90, 89, 89, 90, 90, 90, 89, 88, 88, 90, 92, 96, 97, 97, 97, 98, 100, 102, 103,
-  103, 102, 100, 99, 97, 96, 94, 93, 92, 92, 90, 89, 87, 87, 87, 88, 88, 89, 91, 91, 91,
-  89, 88, 87, 85, 85, 95, 114, 160, 195, 229, 226, 181, 138, 87, 75, 81, 89, 93, 93, 95, 97,
-  98, 98, 99, 99, 99, 99, 101, 102, 102, 102, 102, 104, 107, 108, 108, 108, 109, 110, 112, 112, 113,
-  114, 117, 119, 122, 124, 127, 129, 134, 137, 141, 143, 145, 145, 145, 145, 145, 144, 142, 139, 133, 129,
-  124, 120, 113, 109, 107, 107, 106, 105, 102, 101, 102, 103, 103, 101, 98, 96, 96, 97, 99, 100, 102,
-  102, 101, 100, 100, 101, 104, 105, 106, 106, 106, 106, 104, 103, 103, 103, 103, 102, 101, 101, 103, 104,
-  105, 105, 104, 103, 102, 101, 100, 100, 101, 102, 102, 101, 99, 99, 101, 101, 97, 95, 95, 97, 99,
-  99, 98, 98, 98, 98, 98, 97, 97, 97, 98, 99, 99, 98, 96, 96, 95, 95, 94, 94, 96, 97,
-  96, 93, 90, 91, 94, 96, 95, 94, 94, 96, 97, 97, 98, 100, 103, 104, 104, 105, 111, 115, 121,
-  123, 126, 127, 128, 127, 124, 123, 124, 125, 126, 126, 125, 125, 124, 123, 122, 122, 122, 122, 120, 119,
-  116, 114, 116, 125, 158, 191, 243, 255, 253, 217, 147, 114, 102, 110, 123, 125, 124, 125, 126, 125, 123,
-  121, 121, 120, 120, 121, 122, 123, 123, 123, 124, 126, 129, 129, 129, 129, 130, 132, 132, 132, 132, 133,
-  137, 140, 143, 146, 151, 154, 157, 159, 160, 162, 163, 164, 165, 164, 160, 155, 147, 143, 136, 130, 122,
-  119, 116, 113, 106, 102, 99, 99, 99, 98, 96, 96, 96, 95, 93, 92, 92, 93, 94, 93, 93, 93,
-  92, 91, 89, 89, 90, 91, 91, 92, 93, 94, 93, 91, 89, 89, 90, 91, 90, 88, 86, 85, 86,
-  88, 89, 88, 88, 88, 88, 87, 84, 82, 81, 81, 82, 83, 84, 83, 81, 79, 78, 80, 81, 82,
-  82, 82, 82, 82, 82, 83, 84, 84, 82, 82, 83, 85, 87, 87, 86, 86, 85, 85, 88, 90, 90,
-  89, 89, 90, 91, 91, 92, 95, 100, 102, 103, 101, 96, 93, 89, 88, 86, 85, 83, 83, 85, 87,
-  87, 86, 84, 82, 81, 82, 84, 85, 83, 82, 81, 81, 83, 92, 125, 159, 206, 218, 196, 160, 102,
-  77, 68, 76, 91, 95, 95, 96, 96, 94, 91, 91, 95, 97, 98, 97, 97, 98, 99, 99, 99, 99,
-  100, 102, 106, 108, 109, 110, 112, 114, 115, 114, 115, 117, 123, 127, 131, 133, 136, 138, 140, 140, 140,
-  141, 143, 144, 142, 139, 134, 130, 124, 120, 117, 115, 112, 108, 103, 101, 100, 101, 100, 100, 98, 97,
-  97, 97, 98, 99, 100, 100, 100, 100, 101, 100, 99, 99, 100, 101, 103, 104, 103, 101, 100, 100, 103,
-  105, 105, 104, 102, 101, 102, 103, 103, 103, 102, 101, 100, 99, 99, 99, 98, 98, 99, 100, 100, 99,
-  99, 101, 103, 103, 101, 100, 100, 102, 102, 100, 96, 94, 95, 97, 99, 100, 101, 101, 100, 99, 98,
-  98, 98, 98, 98, 97, 100, 103, 107, 106, 104, 102, 105, 109, 112, 113, 111, 111, 109, 106, 100, 97,
-  96, 97, 97, 97, 96, 96, 96, 95, 93, 92, 94, 95, 95, 95, 94, 92, 88, 87, 97, 114, 152,
-  179, 206, 205, 169, 132, 86, 75, 84, 94, 98, 96, 96, 99, 100, 97, 92, 92, 96, 99, 99, 99,
-  99, 101, 102, 102, 107, 112, 122, 126, 131, 134, 137, 138, 140, 143, 149, 151, 151, 151, 155, 160, 166,
-  169, 171, 172, 173, 173, 172, 172, 173, 173, 170, 166, 159, 155, 150, 146, 140, 138, 135, 134, 131, 130,
-  129, 129, 126, 123, 121, 122, 125, 125, 122, 120, 120, 121, 121, 121, 120, 120, 120, 119, 118, 118, 118,
-  117, 116, 116, 116, 115, 114, 112, 111, 112, 113, 113, 110, 108, 106, 106, 107, 107, 106, 105, 104, 104,
-  105, 105, 104, 104, 102, 100, 98, 99, 102, 103, 100, 96, 93, 95, 99, 99, 97, 95, 92, 91, 91,
-  91, 93, 94, 94, 94, 94, 96, 99, 100, 97, 95, 95, 97, 104, 107, 106, 104, 100, 99, 98, 97,
-  93, 90, 87, 86, 86, 87, 88, 88, 86, 83, 82, 82, 85, 86, 85, 83, 81, 80, 79, 82, 99,
-  122, 169, 196, 203, 180, 124, 90, 67, 69, 80, 85, 88, 88, 89, 89, 87, 87, 90, 93, 96, 95,
-  93, 92, 95, 98, 100, 99, 96, 95, 96, 98, 99, 99, 101, 104, 107, 108, 110, 112, 115, 116, 119,
-  122, 130, 134, 135, 134, 135, 137, 137, 135, 133, 132, 131, 127, 118, 113, 108, 106, 102, 100, 96, 93,
-  90, 90, 91, 91, 89, 87, 87, 88, 92, 92, 90, 88, 90, 92, 95, 94, 89, 87, 88, 91, 95,
-  95, 94, 93, 92, 92, 92, 93, 95, 97, 97, 97, 97, 98, 97, 96, 95, 93, 91, 90, 90, 91,
-  92, 93, 94, 95, 95, 94, 92, 92, 92, 93, 94, 94, 93, 93, 94, 94, 94, 93, 92, 93, 93,
-  93, 92, 92, 93, 95, 97, 98, 99, 100, 100, 102, 106, 109, 111, 111, 107, 103, 99, 99, 99, 97,
-  93, 92, 93, 94, 93, 92, 92, 93, 93, 93, 92, 92, 91, 89, 87, 87, 88, 91, 113, 143, 199,
-  226, 223, 191, 125, 90, 71, 77, 92, 98, 98, 96, 96, 98, 98, 96, 96, 97, 100, 100, 100, 101,
-  104, 106, 107, 106, 106, 107, 108, 108, 109, 109, 111, 114, 118, 120, 122, 123, 126, 128, 131, 133, 138,
-  140, 144, 146, 149, 150, 149, 147, 144, 143, 142, 139, 130, 124, 117, 115, 112, 111, 109, 107, 102, 99,
-  96, 96, 100, 101, 99, 97, 97, 98, 100, 99, 98, 97, 98, 98, 99, 100, 103, 103, 102, 101, 101,
-  102, 102, 102, 102, 102, 102, 102, 103, 104, 103, 102, 103, 107, 114, 119, 124, 125, 126, 125, 123, 124,
-  124, 124, 123, 123, 124, 126, 129, 130, 128, 127, 127, 127, 127, 127, 126, 126, 125, 124, 122, 122, 124,
-  126, 126, 126, 126, 127, 129, 130, 132, 134, 136, 135, 133, 132, 129, 126, 120, 117, 115, 114, 112, 110,
-  109, 108, 107, 106, 105, 105, 105, 106, 107, 106, 101, 97, 94, 98, 120, 148, 204
-};
-
-uint8_t getdata(int i) {
-  return pgm_read_byte_near(data + i);
-}
-
-uint16_t XanalogRead(int pin) {
-#ifdef bHasPPG
-  if (pin == PPG_IN) {
-    //    return (millis()/5) % 100;
-
-    static int i = 0;
-    int j, k;
-    static float a = 128;
-    static float b = 128;
-    static float c = 128;
-    i = (i + 1) % sizeof(data);
-    //return 128+100*sin(i);
-    k = (i + sizeof(data) - 35) % sizeof(data);
-    j = (k + sizeof(data) - 35) % sizeof(data);
-
-    if (getdata(k) > 200)
-      a = 240; else if (getdata(j) > 200)
-      a = 200; else
-      a = a + (128 - a) / 20;
-    b = b + (a - b) / 8;
-    c = c + (b - c) / 8;
-    return c;
-  } else
+#include "FakeInput.h"
 #endif
-  {
-    static int i = 0;
-    i = (i + 1) % sizeof(data);
-    return min(getdata(i) * 4, 1023);
-  }
-}
-#endif
-
-//---------------------------------------------------------------------------
-// DrawStringF
-//
-//---------------------------------------------------------------------------
-void DrawStringF(word s, byte *Font, uint16_t color) {
-  while (true) {
-    char c = pgm_read_byte_near(s);
-    s++;
-    if (c == 0)
-      return;
-    DrawChar(c, Font, color);
-  }
-}
 
 //---------------------------------------------------------------------------
 // TimeConst
 //   calc Alpha for a time constant of a decay
+//    n: number of samples for exponential smoothing
+//    returns exp(-1 / n);
 //---------------------------------------------------------------------------
 float TimeConst(float n) {
   return exp(-1 / n);
@@ -242,68 +109,61 @@ float TimeConst(float n) {
 
 //---------------------------------------------------------------------------
 // MedianOfThree
+//    c,d,e: three values
+//    returns median value
 //---------------------------------------------------------------------------
 int16_t MedianOfThree(int16_t c, int16_t d, int16_t e) {
   int16_t tmp;
-  if (d < c) {
-    tmp = c;
-    c = d;
-    d = tmp;
-  };
-  if (e < c) {
-    e = c;
-  };
+  if (d < c) {    tmp = c;    c = d;    d = tmp;  };
+  if (e < c) {    e = c;  };
   if (d < e) return d; else return e;
 }
 
 //---------------------------------------------------------------------------
 // MedianOfFive
+//    a,b,c,d,e: five values
+//    returns median value
 //---------------------------------------------------------------------------
 int16_t MedianOfFive(int16_t a, int16_t b, int16_t c, int16_t d, int16_t e) {
   int16_t tmp;
-  if (b < a) {
-    tmp = a;
-    a = b;
-    b = tmp;
-  }
-  if (d < c) {
-    tmp = c;
-    c = d;
-    d = tmp;
-  }
-  if (c < a) {
-    tmp = b;
-    b = d;
-    d = tmp;
-    c = a;
-  }
-  if (b < e) {
-    tmp = e;
-    e = b;
-    b = tmp;
-  }
-  if (e < c) {
-    tmp = b;
-    d = tmp;
-    e = c;
-  }
+  if (b < a) {    tmp = a;    a = b;    b = tmp;  }
+  if (d < c) {    tmp = c;    c = d;    d = tmp;  }
+  if (c < a) {    tmp = b;    b = d;    d = tmp;    c = a;  }
+  if (b < e) {    tmp = e;    e = b;    b = tmp;  }
+  if (e < c) {    tmp = b;    d = tmp;  e = c;    }
   if (d < e) return d; else return e;
 }
 
 //-----------------------------------------------------------------------------
 // DrawGridSmall
+//   draw empty grid for small display
 //-----------------------------------------------------------------------------
 void DrawGridSmall(void)
 {
   int16_t  i;
   ClearDisplay(TFT_BLACK);
-  for (i = 0; i < TFT_WIDTH; i++)
-    if (i * 4 * 5 % (1000 / SamplePeriod) == 0)
-      DrawVLine(i, 0, TFT_HEIGHT, TFT_RED);
+
+  #ifdef bHasChartMode
+    for (i=0; i < TFT_WIDTH; i++)
+      if (i*4*5 % sps == 0)
+        DrawVLine(i, 0, TFT_HEIGHT/4, TFT_RED);
+    for (i=TFT_HEIGHT/4; i < TFT_HEIGHT; i+=TFT_HEIGHT/16)
+      if (i % (TFT_HEIGHT/4) == 0)
+        DrawHLine(0, i, TFT_WIDTH, TFT_DARKGRAY); else
+        DrawHLine(0, i, TFT_WIDTH, TFT_MAROON);
+  #else
+    for (i = 0; i < TFT_WIDTH; i++)
+      if (i*4*5 % sps == 0)
+        DrawVLine(i, 0, TFT_HEIGHT, TFT_RED);
+  #endif
 }
 
 //-----------------------------------------------------------------------------
 // DrawPoincareLine
+//   draw a Line on the Poincare display
+//    x1,y1: start point
+//    x2,y2: end point
+//    color: the color it is to be drawn
 //-----------------------------------------------------------------------------
 void DrawPoincareLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color)
 {
@@ -317,6 +177,9 @@ void DrawPoincareLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t c
 
 //-----------------------------------------------------------------------------
 // DrawPoincareFrame
+//   draw a rectangle Poincare display 
+//    x1,y1,x2,y2: the corners of the frame
+//    color: the color it is to be drawn
 //-----------------------------------------------------------------------------
 void DrawPoincareFrame(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color)
 {
@@ -328,6 +191,7 @@ void DrawPoincareFrame(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t 
 
 //-----------------------------------------------------------------------------
 // DrawGridPoincare
+//   draw Poincare display background
 //-----------------------------------------------------------------------------
 void DrawGridPoincare(void)
 {
@@ -372,6 +236,8 @@ void DrawGridPoincare(void)
 //-----------------------------------------------------------------------------
 // DrawGridVLine
 //   for Large display, draw a part of the grid
+//    x: column
+//    y1,y2: ends of line
 //-----------------------------------------------------------------------------
 void DrawGridVLine(int16_t x, int16_t y1, int16_t y2)
 {
@@ -395,22 +261,23 @@ void DrawGridVLine(int16_t x, int16_t y1, int16_t y2)
 
 //-----------------------------------------------------------------------------
 // DrawPoincare
+//   draw the current BPM in the Poincare display 
 //    Poincare plot
-//    t is in range 400..2000 mSec
+//    init: initialise the points array?
 //-----------------------------------------------------------------------------
-void DrawPoincare(uint16_t t)
+void DrawPoincare(bool init)
 {
-  const int nPeriods = 500;
+  const int nPeriods = 400;
   static uint8_t Periods[nPeriods] = {0};
   static int16_t i = 0;
-  int16_t prev;
+  int16_t prev,t;
 
-  if (t <= 0) {
+  if (init) {
     memset(Periods, 0, sizeof(Periods));
     return;
   }
 
-  t = t / PoincareScale;
+  t = 60000 / (CurBPM*PoincareScale);
 
   prev = Periods[i];
   i = (i + 1) % nPeriods;
@@ -423,6 +290,7 @@ void DrawPoincare(uint16_t t)
 
 //-----------------------------------------------------------------------------
 // DrawGridLarge
+//   draw the background of the Large display 
 //-----------------------------------------------------------------------------
 void DrawGridLarge(void)
 {
@@ -445,6 +313,7 @@ void DrawGridLarge(void)
 
 //-----------------------------------------------------------------------------
 // DrawGrid
+//   draw the background of the current display 
 //-----------------------------------------------------------------------------
 void DrawGrid(void)
 {
@@ -455,16 +324,18 @@ void DrawGrid(void)
     case mdBattery: ClearDisplay(TFT_BLACK); break;
   }
   DisplayRepeat = TFT_WIDTH;
-  DrawPoincare(0);
+  DrawPoincare(true);
   ignoreBeats = 2;
 }
 
 //-----------------------------------------------------------------------------
 // centrePeak
 //   attempt to keep a peak in the first third of the screen
+//    x: position of the peak being drawn
 //-----------------------------------------------------------------------------
-void centrePeak(uint16_t period, uint16_t x)
+void centrePeak(uint16_t x)
 {
+  uint16_t period = (60000L/SamplePeriod) /CurBPM;
   int16_t b;
   static int16_t dr = 480;
   static int16_t dt = 0;
@@ -472,19 +343,21 @@ void centrePeak(uint16_t period, uint16_t x)
   b = period;
   while (b < TFT_WIDTH)
     b += period;
-  if (b > dr + 10)
-    dr += 10; else if (b < dr - 10)
+  if (b > dr+10)
+    dr += 10; else
+  if (b < dr-10)
     dr -= 10;
   if (b > dr)
     dr++; else
     dr--;
-  dr = constrain(dr, TFT_WIDTH - 1, 2 * TFT_WIDTH);
+  dr = constrain(dr,TFT_WIDTH-1,2*TFT_WIDTH);
   DisplayRepeat = dr;
   if (x < 80)
-    dt--; else if (x < 160)
+    dt--; else
+  if (x < 160)
     dt++;
   DisplayRepeat += dt;
-  DisplayRepeat = constrain(DisplayRepeat, TFT_WIDTH - 1, 2 * TFT_WIDTH);
+  DisplayRepeat = constrain(DisplayRepeat,TFT_WIDTH-1,2*TFT_WIDTH);
 }
 
 //-----------------------------------------------------------------------------
@@ -513,9 +386,6 @@ void DrawBattVolts(void)
     ILI9341SetCursor(4, 16);
     DrawStringF(F("BPM"), LargeFont, TFT_WHITE);
     #ifdef bHasQT
-      //      DrawBox(TFT_WIDTH-105, 0, 105, 20, TFT_PURPLE);
-      //      ILI9341SetCursor(TFT_WIDTH-105+2, 16);
-      //      DrawStringF(F(QT interval"), LargeFont, TFT_WHITE);
       DrawBox(TFT_WIDTH - w, 0, w, 20, TFT_PURPLE);
       ILI9341SetCursor(TFT_WIDTH - w + 2, 16);
       DrawStringF(F("QT"), LargeFont, TFT_WHITE);
@@ -535,23 +405,225 @@ void DrawBattVolts(void)
   }
 }
 
+//-----------------------------------------------------------------------------
+// DrawChart
+//   draw the current BPM and PAY in the vhart display 
+//    init: initialise the display?
+//-----------------------------------------------------------------------------
+#ifdef bHasChartMode
+void DrawChart(bool init)
+{
+  static int16_t x = -1;
+  static uint8_t pyBPM = 0;
+  static uint8_t pyPAT = 0;
+  static uint8_t yofs = TFT_HEIGHT/4;
+  int16_t y4, y;
+  const int16_t  minBPM = 40;
+  const int16_t  maxBPM = 150;
+  const int16_t  minPAT = 150;
+  const int16_t  maxPAT = 400;
+  const int16_t  BPMmaxRed = 120; // BPM above this shown as red
+  const int16_t  BPMmaxYellow = 100; // BPM above this shown as Yellow
+  const int16_t  BPMminYellow = 50; // BPM below this shown as Yellow
+  const int16_t  BPMminRed = 40; // BPM below this shown as red
+
+  if (init) {
+    x = -1;
+    yofs = 0;
+    return;
+  }
+
+  x++;
+  x = x % TFT_WIDTH;
+
+  if (x == 0) {
+    yofs = (yofs+TFT_HEIGHT/4);
+    if (yofs >= TFT_HEIGHT)
+      yofs = TFT_HEIGHT/4;
+  }
+
+  DrawVLine(x, yofs+1, TFT_HEIGHT/4-1, TFT_BLACK);
+  DrawVLine(x+1, yofs+1, TFT_HEIGHT/4-1, TFT_WHITE);
+  DrawPixel(x, yofs, TFT_DARKGRAY);
+  DrawPixel(x, yofs+TFT_HEIGHT/16, TFT_MAROON);
+  DrawPixel(x, yofs+2*TFT_HEIGHT/16, TFT_MAROON);
+  DrawPixel(x, yofs+3*TFT_HEIGHT/16, TFT_MAROON);
+
+  // display BPM
+  y4 = (CurBPM-minBPM)*TFT_HEIGHT/(4*(maxBPM-minBPM));
+  y = constrain(TFT_HEIGHT/4-y4, 0,TFT_HEIGHT/4-1);
+  if (x == 0)
+    pyBPM = y;
+
+  if ((CurBPM > BPMmaxRed) || (CurBPM < BPMminRed))
+    DrawVLine(x, y+yofs, y4, TFT_MAROON); else
+  if ((CurBPM > BPMmaxYellow) || (CurBPM < BPMminYellow))
+    DrawVLine(x, y+yofs, y4, TFT_OLIVE); else
+    DrawVLine(x, y+yofs, y4, TFT_DARKGREEN);
+
+  if (y >= pyBPM)
+    DrawVLine(x, pyBPM+yofs, y-pyBPM+1, TFT_WHITE); else
+    DrawVLine(x, y+yofs, pyBPM-y+1, TFT_WHITE);
+
+  pyBPM = y;
+
+  #ifdef bHasPAT
+    // display PAT
+    y4 = (CurPAT-minPAT)*TFT_HEIGHT/(4*(maxPAT-minPAT));
+    y = constrain(TFT_HEIGHT/4-y4, 0,TFT_HEIGHT/4-1);
+    if (x == 0)
+      pyPAT = y;
+
+    if (y >= pyPAT)
+      DrawVLine(x, pyPAT+yofs, y-pyPAT+1, TFT_CYAN); else
+      DrawVLine(x, y+yofs, pyPAT-y+1, TFT_CYAN);
+
+    pyPAT = y;
+  #endif
+}
+#endif
+
+//-----------------------------------------------------------------------------
+// DrawCharCol
+//   draws a single column of a character
+//   used by DrawBoxIntCol
+//     c: char to be drawn
+//     Cursorx: position of char
+//     Cursory: position of char
+//     x: column to be drawn
+//     Font: Font
+//     color: foreground color
+//-----------------------------------------------------------------------------
+bool DrawCharCol(uint8_t c, int x, word Font, uint16_t color) {
+  word n, j;
+  byte ymax, desc;
+  unsigned long b,d;
+
+  ymax = pgm_read_byte_near(Font); // height of char
+  Font++;
+  desc = pgm_read_byte_near(Font); // size of descender
+  Font++;
+
+  j = pgm_read_byte_near(Font); // first char
+  Font++;
+  if (c < j) return false;
+
+  while (c > j) {
+    b = pgm_read_byte_near(Font); // number of columns in char
+    if (b == 0)
+      return false;
+    if (ymax > 15)
+      Font += b * 3 + 1;
+    else if (ymax > 7)
+      Font += b * 2 + 1;
+    else
+      Font += b + 1;
+    c--;
+  }
+
+  // c now points at the start of the required character
+  n = pgm_read_byte_near(Font); // number of columns in char
+  Font++;
+
+  if (Cursorx+n < x) {
+    Cursorx += n;
+  } else {
+    while (n > 0) {
+      if (Cursorx == x) {
+        b = pgm_read_byte_near(Font);
+        Font++;
+        if (ymax > 7) {
+          d = pgm_read_byte_near(Font);
+          b |= d << 8;
+          Font++;
+        }
+        if (ymax > 15) {
+          d = pgm_read_byte_near(Font);
+          b |= d << 16;
+          Font++;
+        }
+        for (j = 0; j <= ymax; j++) {
+          if (b & 1) 
+            DrawPixel(Cursorx, Cursory + desc - j, color);
+          b = b >> 1;
+        }
+        return true;
+      } else {
+        Font += ymax / 8 + 1;
+      }
+
+      Cursorx++;
+      n--;
+    }
+  }
+  Cursorx += letter_gap;
+  return false;
+}
+
+//-----------------------------------------------------------------------------
+// DrawBoxIntCol
+//   draws a single column of an int in a box
+//   needed because it takes 40mS to draw a whole int in a box
+//     left: left edge of the box on the screen
+//     top: top edge of the box
+//     width: width of the box
+//     height: height of the box
+//     xOffset: left-hand offset to chars
+//     yOffset: top offset to chars
+//     x: position on the screen of the column to be drawn
+//     i: integer value to be drawn
+//     Font: Font
+//     FG: foreground color
+//     BG: background color
+//-----------------------------------------------------------------------------
+void DrawBoxIntCol(int left, int top, int width, int height, int xOffset, int yOffset,
+    int x, int i, word Font, uint16_t FG, uint16_t BG) {
+
+  if ((x >= left) && (x < left+width)) {
+    DrawVLine(x, top, height, BG);
+
+    if (FG == BG)
+      return;
+
+    ILI9341SetCursor(left+xOffset,top+yOffset);
+
+    bool HasDigit = false;
+    int n =  10000;
+    while (n > 0) {
+      if ((i >= n) || (n == 1) || HasDigit) {
+        if (DrawCharCol('0' + (i / n), x, Font, FG))
+          return;
+        HasDigit = true;
+      }
+      i %= n;
+      n /= 10;
+    }
+  }
+}
+
 //---------------------------------------------------------------------------
 // showBPM
 //---------------------------------------------------------------------------
-void showBPM() {
-  DrawBox(0, 0, 30, 20, TFT_NAVY);
-  ILI9341SetCursor(4, 16);
-  DrawInt(CurBPM, LargeFont, TFT_WHITE);
+void showBPM(int x) {
+  const int left = 0;
+  static int i;
+  if (x == left)
+    i = CurBPM;
+  DrawBoxIntCol(left, 0, 30, 20, 4,16, x, i, LargeFont, TFT_WHITE, TFT_NAVY);
 }
 
 //---------------------------------------------------------------------------
 // showQT
 //---------------------------------------------------------------------------
 #ifdef bHasQT
-void showQT() {
-  DrawBox(TFT_WIDTH - 30, 0, 30, 20, TFT_PURPLE);
-  ILI9341SetCursor(TFT_WIDTH - 30 + 2, 16);
-  DrawInt(CurQT, LargeFont, TFT_WHITE);
+void showQT(int x) {
+  const int left = TFT_WIDTH-30;
+  static int i;
+  if (x == left)
+    i = CurQT;
+
+  DrawBoxIntCol(left, 0, 30, 20, 2,16,
+    x, i, LargeFont, TFT_WHITE, TFT_PURPLE);
 }
 #endif
 
@@ -559,74 +631,91 @@ void showQT() {
 // showPAT
 //---------------------------------------------------------------------------
 #ifdef bHasPAT
-void showPAT() {
-  if (PPGreceived >= PPGreceivedMin) {
-    #ifdef bHasQT
-      const int y = 20;
-    #else
-      const int y = 0;
-    #endif
-    DrawBox(TFT_WIDTH - 30, y, 30, 20, TFT_CYAN);
-    ILI9341SetCursor(TFT_WIDTH - 30 + 1, y + 16);
-    DrawInt(CurPAT, LargeFont, TFT_BLACK);
-    }
+void showPAT(int x) {
+  #ifdef bHasQT
+    const int y = 20;
+  #else
+    const int y = 0;
+  #endif
+  const int left = TFT_WIDTH-30;
+
+  if ((CurPAT > 150) && (CurPAT < 500)) {
+    static int i;
+    if (x == left)
+      i = CurPAT;
+
+    DrawBoxIntCol(left, y, 30, 20, 2,16,
+      x, i, LargeFont, TFT_BLACK, TFT_CYAN);
+  } else {
+    DrawBoxIntCol(left, y, 30, 20,
+      2,17,
+      x, 0, LargeFont, TFT_BLACK, TFT_BLACK);
+  }
 }
 #endif
 
 //---------------------------------------------------------------------------
 // drawBPM
-//   filters and draws BPM
+//   filters and draws BPM in the chart
+//    b: rough estimate of bpm
 //---------------------------------------------------------------------------
 void drawBPM(int16_t b)
 {
-  int16_t c;
   static int16_t prev[4] = {60, 60, 60, 60};
   static float bpm = 60;
 
   if (ignoreBeats > 0) {
     ignoreBeats--;
-  } else {
-    c = MedianOfFive(prev[0], prev[1], prev[2], prev[3], b);
+  } else {    
+    bpm = bpm + (MedianOfFive(prev[0], prev[1], prev[2], prev[3], b) - bpm)/4; // smoothing
+    CurBPM = bpm;
+
     prev[3] = prev[2];
     prev[2] = prev[1];
     prev[1] = prev[0];
     prev[0] = b;
-    bpm = (bpm * 5 + c) / 6; // smoothing
-    CurBPM = bpm;
 
-    if (mode != mdLargeECG)
-      showBPM();
+    #ifdef bHasChartMode
+      if (mode == mdSmallECG)
+        DrawChart(false);
+    #endif
   }
 }
 
 //---------------------------------------------------------------------------
 // RpeakFound
+//   an R-peak has been found, deall with it
+//    x: x-coord of peak
+//    sinceRpeak: time since previous R-peak (in mS)
+//    return: whether this is a good peak
 //---------------------------------------------------------------------------
-int16_t RpeakFound(int16_t x, int16_t sinceRpeak) {
+bool RpeakFound(int16_t x, int16_t sinceRpeak) {
   int16_t bpm;
 
-  if (sinceRpeak < sps / 5) /*R_peaks can't be less than 200mS apart*/
-    return 0;
+  if (sinceRpeak < 200) /*R_peaks can't be less than 200mS apart*/
+    return false;
 
   lastNegDiff2 = lastNegDiff1;
-  bpm = 60000 / (sinceRpeak * 1000 / sps);
+  bpm = 60000/sinceRpeak;
 
-#if defined bDebug && defined bWindows
-  DrawX(Form1->PaintBox1->Canvas, x - sinceRpeak, 10, 5);
-  CanvasTextOut(Form1->PaintBox1->Canvas, x + 3, 10, "%d", bpm);
-#endif
+  #if defined bDebug && defined bWindows
+    DrawX(Form1->PaintBox1->Canvas,x-sinceRpeak/SamplePeriod,10,5);
+    CanvasTextOut(Form1->PaintBox1->Canvas, x+3,10,"%d",bpm);
+  #endif
 
-  drawBPM(60000 / (sinceRpeak * 1000 / sps));
-
-  centrePeak(sinceRpeak, x);
-  return bpm;
+  drawBPM(bpm);
+  centrePeak(x);
+  return true;
 }
 
 //-----------------------------------------------------------------------------
 // findbaseline
+//   calculate the baseline value
 //   a is the latest sample*/
 //   g is baseline*/
 //   exponentially "decays" to current sample but tc is longer the further away aa is from the current sample*/
+//    diff: differential of ecg sample values
+//    return: estimate of the "baseline"
 //-----------------------------------------------------------------------------
 float findbaseline(int16_t a, int16_t diff) {
   static float g = TFT_HEIGHT / 2; // estimate of baseline
@@ -638,28 +727,29 @@ float findbaseline(int16_t a, int16_t diff) {
 }
 
 //---------------------------------------------------------------------------
-// have got a value of the QT interval
-//   QTinterval in samples
-//   x: where to draw the yellow bar (debugging)
-//   bpm: in order to calculate QTc
+//  HaveQT
+//   have calculated a value of the QT interval
+//    QTinterval in samples
+//    x: where to draw the yellow bar (debugging)
+//    bpm: in order to calculate QTc
 //---------------------------------------------------------------------------
 #ifdef bHasQT
 void HaveQT(int16_t QTinterval,
-#ifdef bDebug
-            int16_t x,
-#endif
+            #ifdef bDebug
+              int16_t x,
+            #endif
             int16_t bpm) {
   static int16_t prev[4] = {50, 350, 350, 350};
   int16_t QT;
   static float QTs = 350;
 
-#ifdef bDebug
-  if (mode == mdLargeECG) {
-    DrawVLine(x, TFT_HEIGHT - 10, 10, TFT_YELLOW);
-    DrawVLine(x + QTinterval, TFT_HEIGHT - 10, 10, TFT_YELLOW);
-    DrawHLine(x, TFT_HEIGHT - 5, QTinterval, TFT_YELLOW);
-  }
-#endif
+  #ifdef bDebug
+    if (mode == mdLargeECG) {
+      DrawVLine(x, TFT_HEIGHT - 10, 10, TFT_YELLOW);
+      DrawVLine(x + QTinterval, TFT_HEIGHT - 10, 10, TFT_YELLOW);
+      DrawHLine(x, TFT_HEIGHT - 5, QTinterval, TFT_YELLOW);
+    }
+  #endif
 
   QTinterval = QTinterval * SamplePeriod;
   QT = MedianOfFive(prev[0], prev[1], prev[2], prev[3], QTinterval);
@@ -670,8 +760,6 @@ void HaveQT(int16_t QTinterval,
 
   QTs = (QTs * 5 + QT) / 6; // smoothing
   CurQT = QTs;
-  if (mode != mdLargeECG)
-    showQT();
   prev[3] = prev[2];
   prev[2] = prev[1];
   prev[1] = prev[0];
@@ -679,6 +767,12 @@ void HaveQT(int16_t QTinterval,
 }
 #endif
 
+//---------------------------------------------------------------------------
+// findRpeak
+//   is the current ecg making an R-peak?
+//    diff: differential of ecg sample values
+//    x: x-coord of peak (for debugging)
+//    return: whether this is a peak
 //---------------------------------------------------------------------------
 bool findRpeak(int16_t diff, int16_t x) {
   /*it's an R_peak if it exceeds dmin..dmax*/
@@ -705,16 +799,19 @@ bool findRpeak(int16_t diff, int16_t x) {
     result = true;
   }
 
-#if defined bDebug && defined bWindows
-  Form1->PaintBox1->Canvas->Pixels[x][Form1->PaintBox1->Height / 2 - dmin] = clBlue;
-  Form1->PaintBox1->Canvas->Pixels[x][Form1->PaintBox1->Height / 2 - dmax] = clBlue;
-#endif
+  #if defined bDebug && defined bWindows
+    Form1->PaintBox1->Canvas->Pixels[x][Form1->PaintBox1->Height / 2 - dmin] = clBlue;
+    Form1->PaintBox1->Canvas->Pixels[x][Form1->PaintBox1->Height / 2 - dmax] = clBlue;
+  #endif
 
   return result;
 }
 
 //---------------------------------------------------------------------------
 // differentiate
+//   differentiate the current ecg 
+//    a: ecg sample value
+//    return: differential of ecg sample values
 //---------------------------------------------------------------------------
 int16_t differentiate(int16_t a) {
   static int16_t buf[nDiff + 1]  = {0, 0, 0, 0};
@@ -730,38 +827,50 @@ int16_t differentiate(int16_t a) {
 
 //-----------------------------------------------------------------------------
 // AnalysePPG
+//   analyse the current PPG and xalxulate the PAT
+//    x: x-coord being displayed
+//    ppg: ppg sample value
+//    timeSinceR: time since previous R-peak (in mS)
 //-----------------------------------------------------------------------------
 #ifdef bHasPAT
-void AnalysePPG(uint16_t x, int16_t ppg, int16_t sinceRpeak)
+void AnalysePPG(uint16_t x, int16_t ppg, int16_t timeSinceR)
 {
-#define TC 20
+  #define TC 20
   static int16_t prevppg = 0;
   static float diff = 0;
-  static float maxdiff = 0;
+  static float maxdiff = 0; // in samples
   static int16_t tmaxdiff = 0;
+  static int16_t prev[5] = {360, 360, 360, 360, 360};
 
-  diff = diff * (1.0 - 1.0 / TC) + (ppg - prevppg) * (1.0 / TC);
+  diff = diff*(1.0-1.0/TC) + (ppg-prevppg)*(1.0/TC);
   prevppg = ppg;
 
   #ifdef bDebug
-    if (mode == mdLargeECG) {
-      DrawPixel(x - 1, TFT_HEIGHT - 50 - diff * TC, TFT_GREEN);
-    }
+    if (mode == mdLargeECG)
+      DrawPixel(x-1, TFT_HEIGHT-50-diff*TC, TFT_GREEN);
     static int16_t xmaxdiff = 0;
     if (diff > maxdiff)
-      xmaxdiff = x - TC / 5;
+      xmaxdiff = x-TC/5;
   #endif
 
   if (diff > maxdiff) {
-    tmaxdiff = sinceRpeak;
+    tmaxdiff = timeSinceR/SamplePeriod;
     maxdiff = diff;
   }
 
-  if (sinceRpeak == 0) {
-#ifdef bDebug
-    DrawVLine(xmaxdiff, 150, 40, TFT_GREEN);
-#endif
-    CurPAT = (tmaxdiff - TC / 2) * SamplePeriod;
+  if (timeSinceR == 0) {
+    #ifdef bDebug
+      if (mode == mdLargeECG)
+        DrawVLine(xmaxdiff, 150, 40, TFT_GREEN);
+    #endif
+
+    prev[4] = prev[3];
+    prev[3] = prev[2];
+    prev[2] = prev[1];
+    prev[1] = prev[0];
+    prev[0] = (tmaxdiff-TC/2)*SamplePeriod;
+    CurPAT = CurPAT + (MedianOfFive(prev[0], prev[1], prev[2], prev[3], prev[4]) - CurPAT)/4; // smoothing
+
     tmaxdiff = 0;
     maxdiff = 0;
   }
@@ -769,13 +878,18 @@ void AnalysePPG(uint16_t x, int16_t ppg, int16_t sinceRpeak)
 #endif
 
 //---------------------------------------------------------------------------
+//  AnalyseEPG
+//   analyse the current ECG and xalxulate the QT
+//    ecg: ecg sample value
+//    x: x-coord being displayed
+//    ppg: ppg sample value
+//---------------------------------------------------------------------------
 void AnalyseEPG(uint8_t ecg, uint16_t x, int16_t ppg)
 {
   int16_t i, diff;
   float qi, w, g;
 
-  static int16_t bpm = 0;
-  static int16_t sinceRpeak = 1000;
+  static long RpeakTime = 0;
   static float b = 0;
   static float c = 0;
   static int16_t ymax = 0;
@@ -786,17 +900,17 @@ void AnalyseEPG(uint8_t ecg, uint16_t x, int16_t ppg)
   static float St = 0;
   static float Sta = 0;
   static float Sw = 0;
+  static int16_t sinceRpeak = 0;
 
   /*Draw dy/dx---------------*/
   diff = differentiate(ecg);
-#if defined bDebug && defined bWindows
-  static int16_t prevdiff = 0;
-  Form1->PaintBox1->Canvas->MoveTo(x - 1, Form1->PaintBox1->Height / 2 - prevdiff);
-  Form1->PaintBox1->Canvas->LineTo(x, Form1->PaintBox1->Height / 2 - diff);
-  prevdiff = diff;
-#endif
+  #if defined bDebug && defined bWindows
+    static int16_t prevdiff = 0;
+    Form1->PaintBox1->Canvas->MoveTo(x - 1, Form1->PaintBox1->Height / 2 - prevdiff);
+    Form1->PaintBox1->Canvas->LineTo(x, Form1->PaintBox1->Height / 2 - diff);
+    prevdiff = diff;
+  #endif
 
-  sinceRpeak++;
   lastNegDiff1++;
   lastNegDiff2++;
   if (sinceymax >= 0)
@@ -808,29 +922,28 @@ void AnalyseEPG(uint8_t ecg, uint16_t x, int16_t ppg)
     lastNegDiff1 = 0;
 
   /*find R peak---------------*/
-  if (findRpeak(diff, x)) {
-    i = RpeakFound(x, sinceRpeak);
-    if (i > 0)
-    {
-      bpm = i;
-      if (mode == mdPoincare)
-        DrawPoincare(sinceRpeak * SamplePeriod);
-      ymax = 0;
-      sinceRpeak = 0;
-    }
+  sinceRpeak++;
+  if (findRpeak(diff, x) && RpeakFound(x,millis()-RpeakTime))
+  {
+    if (mode == mdPoincare)
+      DrawPoincare(false);
+    ymax = 0;
+    RpeakTime = millis();
+    sinceRpeak = 0;
   }
 
-#ifdef bHasQT
-  /*find baseline---------------*/
-  g = findbaseline(ecg, diff);
-#ifdef bDebug
-  if (mode == mdLargeECG)
-    DrawPixel(x - nDiff, TFT_HEIGHT - g, TFT_MAGENTA);
-#endif
-
-  /*find T peak---------------*/
-  if ((sinceRpeak > sps / 5)) /*ignore the hump before 200mS*/
-    if ((sinceRpeak < sps / 2)) /*ignore the hump after 500mS*/
+  int16_t timeSinceR = millis()-RpeakTime;
+  
+  #ifdef bHasQT
+    /*find baseline---------------*/
+    g = findbaseline(ecg, diff);
+    #ifdef bDebug
+      if (mode == mdLargeECG)
+        DrawPixel(x - nDiff, TFT_HEIGHT - g, TFT_MAGENTA);
+    #endif
+  
+    /*find T peak---------------*/
+    if ((timeSinceR > 200) && (timeSinceR < 500)) /*ignore the hump before 200mS and after 500mS*/
     {
       if (ecg > ymax)
       {
@@ -843,54 +956,57 @@ void AnalyseEPG(uint8_t ecg, uint16_t x, int16_t ppg)
       }
     }
 
-  if ((sinceymax > 0))
-  {
-    w = sinceymax * (n - 1 - sinceymax);
-    Stt = Stt + sinceymax * sinceymax * w;
-    Sta = Sta + sinceymax * ecg * w;
-    Sa = Sa + ecg * w;
-    St = St + sinceymax * w;
-  }
-
-  if ((sinceymax == n - 1)) /*100mS after peak of t*/
-  {
-    Sw = n * (n - 1) * (n - 2) / 6;
-
-    if (Stt > 0)
+    if ((sinceymax > 0))
     {
-      b = (Sta * Sw - St * Sa) / (Stt * Sw - St * St);
-      c = (Sa - b * St) / Sw;
-
-      if (b < 0)
+      w = sinceymax * (n - 1 - sinceymax);
+      Stt = Stt + sinceymax * sinceymax * w;
+      Sta = Sta + sinceymax * ecg * w;
+      Sa = Sa + ecg * w;
+      St = St + sinceymax * w;
+    }
+  
+    if ((sinceymax == n - 1)) /*100mS after peak of t*/
+    {
+      Sw = n * (n - 1) * (n - 2) / 6;
+  
+      if (Stt > 0)
       {
-#ifdef bDebug
-        if (mode == mdLargeECG)
-          DrawLine(x - sps / 10 + (-sps / 10), TFT_HEIGHT - (b * (-sps / 10) + c), x - sps / 10 + (2 * sps / 10), TFT_HEIGHT - (b * (2 * sps / 10) + c), TFT_OLIVE);
-#endif
-
-        qi = (g - c) / b;
-
-        if (qi > 0)
+        b = (Sta * Sw - St * Sa) / (Stt * Sw - St * St);
+        c = (Sa - b * St) / Sw;
+  
+        if (b < 0)
         {
-          qi = qi - sinceymax + lastNegDiff2 + nDiff;
-          HaveQT(qi,
-#ifdef bDebug
-                 x - lastNegDiff2 - nDiff,
-#endif
-                 bpm);
+          #ifdef bDebug
+            if (mode == mdLargeECG)
+              DrawLine(x - sps / 10 + (-sps / 10), TFT_HEIGHT - (b * (-sps / 10) + c), x - sps / 10 + (2 * sps / 10), TFT_HEIGHT - (b * (2 * sps / 10) + c), TFT_OLIVE);
+          #endif
+  
+          qi = (g - c) / b;
+  
+          if (qi > 0)
+          {
+            qi = qi - sinceymax + lastNegDiff2 + nDiff;
+            HaveQT(qi,
+              #ifdef bDebug
+                x - lastNegDiff2 - nDiff,
+              #endif
+              CurBPM);
+          }
         }
       }
     }
-  }
-#endif
+  #endif
 
-#ifdef bHasPAT
-  AnalysePPG(x, ppg, sinceRpeak);
-#endif
+  #ifdef bHasPAT
+    AnalysePPG(x, ppg, timeSinceR);
+  #endif
 }
 
 //-----------------------------------------------------------------------------
 // DrawTraceLargePPG
+//   draw the PPG in the Large display
+//    x: x-coord being displayed
+//    ppg: ppg sample value
 //-----------------------------------------------------------------------------
 #ifdef bHasPPG
 void DrawTraceLargePPG(uint16_t x, int16_t ppg)
@@ -916,10 +1032,11 @@ void DrawTraceLargePPG(uint16_t x, int16_t ppg)
     if (x < TFT_WIDTH) {
       DrawGridVLine(x, pt, TracePPG[x]);
   
-      if ((x > 0) && ((ppg != 0) || (py != 0)))
+      if ((x > 0) && ((ppg != 0) || (py != 0))) {
         if (ppg >= py)
             DrawVLine(x, py, ppg - py + 1, TFT_CYAN); else
           DrawVLine(x, ppg, py - ppg + 1, TFT_CYAN);
+      }
       py = ppg;
   
       pt = TracePPG[x];
@@ -931,6 +1048,10 @@ void DrawTraceLargePPG(uint16_t x, int16_t ppg)
 
 //-----------------------------------------------------------------------------
 // DrawTraceLargeECG
+//   draw the ECG in the Large display
+//    x: x-coord being displayed
+//    ecg: ecg sample value
+//    ppg: ppg sample value
 //-----------------------------------------------------------------------------
 void DrawTraceLargeECG(uint16_t x, int16_t ecg, int16_t ppg)
 {
@@ -942,16 +1063,16 @@ void DrawTraceLargeECG(uint16_t x, int16_t ecg, int16_t ppg)
 
   ecg = constrain(TFT_HEIGHT - ecg, 0, TFT_HEIGHT - 1);
 
-#ifdef bDebug
-#ifdef bWindows
-  if (x == 0)
-    Form1->PaintBox1->Canvas->FillRect(Form1->PaintBox1->ClientRect);
-  RemoveColor(x, clAqua);
-  RemoveColor(x, clYellow);
-  RemoveColor(x, clFuchsia);
-#endif
-  DrawVLine(x, TFT_HEIGHT - 10, 10, 0);
-#endif
+  #ifdef bDebug
+    #ifdef bWindows
+      if (x == 0)
+        Form1->PaintBox1->Canvas->FillRect(Form1->PaintBox1->ClientRect);
+      RemoveColor(x, clAqua);
+      RemoveColor(x, clYellow);
+      RemoveColor(x, clFuchsia);
+    #endif
+    DrawVLine(x, TFT_HEIGHT - 10, 10, 0);
+  #endif
 
   if (x < TFT_WIDTH) {
     DrawGridVLine(x, pt, TraceECG[x]);
@@ -963,21 +1084,13 @@ void DrawTraceLargeECG(uint16_t x, int16_t ecg, int16_t ppg)
     pt = TraceECG[x];
     TraceECG[x] = ecg;
   }
-
-  if (x == TFT_WIDTH - 1) {
-    showBPM();
-#ifdef bHasQT
-    showQT();
-#endif
-
-#ifdef bHasPAT
-    showPAT();
-#endif
-  }
 }
 
 //-----------------------------------------------------------------------------
 // DrawTraceLarge
+//   draw the ECG and PPG in the Large display
+//    ecg: ecg sample value
+//    ppg: ppg sample value
 //-----------------------------------------------------------------------------
 void DrawTraceLarge(int16_t ecg, int16_t ppg)
 {
@@ -989,56 +1102,76 @@ void DrawTraceLarge(int16_t ecg, int16_t ppg)
     x++;
     x = x % DisplayRepeat;
     DrawTraceLargeECG(x, ecg, ppg);
-#ifdef bHasPPG
-    DrawTraceLargePPG(x, ppg);
-#endif
+    #ifdef bHasPPG
+      DrawTraceLargePPG(x, ppg);
+    #endif
+
+    showBPM(x);
+    #ifdef bHasQT
+      showQT(x);
+    #endif
+    #ifdef bHasPAT
+      showPAT(x);
+    #endif
   }
 }
 
 //-----------------------------------------------------------------------------
-// DrawTraceSmallPPG
+// DrawPPGTraceSmall
+//   draw the PPG in the Small display
+//    x: x-coord being displayed
+//    yofs: which quarter of the screen we're in
+//    ppg: ppg sample value
 //-----------------------------------------------------------------------------
 #ifdef bHasPPG
-void DrawTraceSmallPPG(uint16_t x, uint16_t yofs, int16_t ppg)
+void DrawPPGTraceSmall(uint16_t x, uint16_t yofs, int16_t ppg)
 {
-  //  static uint8_t TracePPG[TFT_WIDTH];
-  //  static uint8_t pt = 0;
   static uint8_t py = 0;
-  //  int16_t i;
-  static int16_t ofs = 0;
+  static float ofsq = 0;
   static bool bShow = false;
 
   if (x == 1) {
-    if (ppgmin < 1024)
-      ofs = ppgmin / 4 - 4;
-    ppgmin = 1024;
     bShow = ppg >= 0;
     ppgEnergy = 0;
   }
 
-   if (PPGreceived >= PPGreceivedMin) {
-     if (bShow) {
-      ppg = TFT_HEIGHT / 4 - ppg / 4 + ofs;
+  if (PPGreceived >= PPGreceivedMin) {
+    if (bShow) {
+      ppg = TFT_HEIGHT/4-ppg/4;
+      ofsq = ofsq+(TFT_HEIGHT*3/(4*4) - ppg - ofsq)/100;
+      if (ppg + ofsq > TFT_HEIGHT/4)
+        ofsq = TFT_HEIGHT/4 - ppg;
+      if (ppg + ofsq < 0)
+        ofsq = -ppg;
+      ppg = ppg + ofsq;
   
-      if (x / 4 > 0)
+      #ifdef bHasChartMode
+        ppg = constrain(ppg,0,TFT_HEIGHT/4-1);
+      #endif
+
+      if (x / 4 > 0) {
         if (ppg >= py)
-            DrawVLine(x / 4, py + yofs, ppg - py + 1, TFT_CYAN); else
+          DrawVLine(x / 4, py + yofs, ppg - py + 1, TFT_CYAN); else
           DrawVLine(x / 4, ppg + yofs, py - ppg + 1, TFT_CYAN);
+      }
   
       py = ppg;
     }
-   }
- }
+  }
+}
 #endif
-
 
 //-----------------------------------------------------------------------------
 // DrawTraceSmall
+//   draw the ECG and PPG in the Small display
+//    ecg: ecg sample value
+//    ppg: ppg sample value
 //-----------------------------------------------------------------------------
 void DrawTraceSmall(int16_t ecg, uint16_t ppg)
 {
   static uint16_t x = 0;
-  static uint8_t py = 0;
+  static uint8_t ymin = 0;
+  static uint8_t ymax = 0;
   static uint8_t yofs = 0;
   int16_t x4, y4;
 
@@ -1048,37 +1181,55 @@ void DrawTraceSmall(int16_t ecg, uint16_t ppg)
   }
 
   x++;
-  x = x % (TFT_WIDTH * 4);
-  x4 = x / 4;
-  y4 = ecg / 4;
+  x = x % (TFT_WIDTH*4);
+  x4 = x/4;
+  y4 = ecg/4;
 
-  if (x == 0) {
-    yofs = (yofs + TFT_HEIGHT / 4);
-    if (yofs >= TFT_HEIGHT)
-      yofs = 0;
-  }
+  #ifdef bHasChartMode
+    yofs = 0;
+  #else
+    if (x == 0) {
+      yofs = (yofs+TFT_HEIGHT/4);
+      if (yofs >= TFT_HEIGHT)
+        yofs = 0;
+    }
+  #endif
+  y4 = constrain(TFT_HEIGHT/4-y4, 0,TFT_HEIGHT/4-1);
+
+  ymin = min(ymin, y4);
+  ymax = max(ymax, y4);
 
   if (x % 4 == 0) {
-    if (x4 * 4 * 5 % (1000 / SamplePeriod) == 0)
-      DrawVLine(x4, yofs, TFT_HEIGHT / 4, TFT_RED); else
-      DrawVLine(x4, yofs, TFT_HEIGHT / 4, TFT_BLACK);
+    if (x4*4*5 % sps == 0)
+      DrawVLine(x4, yofs, TFT_HEIGHT/4, TFT_RED); else
+      DrawVLine(x4, yofs, TFT_HEIGHT/4, TFT_BLACK);
+    DrawVLine(x4, ymin+yofs, ymax-ymin+1, TFT_WHITE);
+    ymin = y4;
+    ymax = y4;
   }
-
-  y4 = constrain(TFT_HEIGHT / 4 - y4, 0, TFT_HEIGHT / 4 - 1);
-  if (y4 >= py)
-    DrawVLine(x4, py + yofs, y4 - py + 1, TFT_WHITE); else
-    DrawVLine(x4, y4 + yofs, py - y4 + 1, TFT_WHITE);
-
-  py = y4;
 
   AnalyseEPG(ecg, x, ppg);
   #ifdef bHasPPG
-    DrawTraceSmallPPG(x, yofs, ppg);
+    DrawPPGTraceSmall(x, yofs, ppg);
   #endif
+  
+  if (x % 4 == 3) {
+    showBPM(x4);
+    showBPM(x4 - TFT_WIDTH/2-15);
+    #ifdef bHasQT
+      showQT(x4);
+      showQT(x4 + TFT_WIDTH/2+15);
+    #endif
+    #ifdef bHasPAT
+      showPAT(x4);
+      showPAT(x4 + TFT_WIDTH/2-15);
+    #endif
+  }
 }
 
 //-------------------------------------------------------------------------
 // MakeFakePulse
+//   output a fake "pulse" to the FAKE_OUT pin 
 //-------------------------------------------------------------------------
 #ifdef bFakeECGoutput
 void MakeFakePulse(void)
@@ -1113,7 +1264,11 @@ void CheckButton(void)
       if (mode > mdPoincare)
         mode = 0;
       DrawGrid();
-      DrawTraceSmall(-1, 0);
+      #ifdef bHasChartMode
+        DrawChart(true);
+      #else
+        DrawTraceSmall(-1, 0);
+      #endif
       DrawTraceLarge(-1, 0);
     }
   }
@@ -1121,6 +1276,11 @@ void CheckButton(void)
 
 //-----------------------------------------------------------------------------
 // CheckLeadsOff
+//   check for Leads-Off and display error message
+//    pin: Arduino pin number
+//    y: where to display error message
+//    c: 'L' or 'R'
+//    LO: whether is error message currently drawn
 //-----------------------------------------------------------------------------
 void CheckLead(byte pin, int y, char c, bool *LO)
 {
@@ -1154,40 +1314,9 @@ void CheckLeadsOff(void)
 }
 
 //-------------------------------------------------------------------------
-// Filter
-//   Low Pass Filter
-//-------------------------------------------------------------------------
-int LowPassFilter(int ecg)
-{
-  static int py = 0;
-  static int ppy = 0;
-  static int ppecg = 0;
-  static int pecg = 0;
-  int y;
-  static int mid = 0;
-
-  const long filt_a0 = 8775;
-  const long filt_a1 = 17550;
-  const long filt_a2 = 8775;
-  const long filt_b1 = -50049;
-  const long filt_b2 = 19612;
-
-  if (ecg > mid)
-    mid++; else
-    mid--;
-
-  ecg -= mid; // to remove DC offset
-  y = (filt_a0 * ecg + filt_a1 * pecg + filt_a2 * ppecg - filt_b1 * py - filt_b2 * ppy) >> 16;
-  ppy = py;
-  py = y;
-  ppecg = pecg;
-  pecg = ecg;
-  return y + mid;
-}
-
-//-------------------------------------------------------------------------
 // FilterLowPass
-//   Low Pass Filter
+//   filter the ECG 
+//     Low Pass Filter
 //-------------------------------------------------------------------------
 int FilterLowPass(int ecg)
 {
@@ -1219,8 +1348,9 @@ int FilterLowPass(int ecg)
 
 //-------------------------------------------------------------------------
 // FilterNotch50HzQ1
-//   Notch Filter 50Hz
-//   Q = 1 or 2
+//   filter the ECG 
+//     Notch Filter 50Hz
+//     Q = 1 
 //-------------------------------------------------------------------------
 int FilterNotch50HzQ1(int ecg)
 {
@@ -1249,8 +1379,9 @@ int FilterNotch50HzQ1(int ecg)
 
 //-------------------------------------------------------------------------
 // FilterNotch50HzQ2
-//   Notch Filter 50Hz
-//   Q = 1 or 2
+//   filter the ECG 
+//     Notch Filter 50Hz
+//     Q = 2
 //-------------------------------------------------------------------------
 int FilterNotch50HzQ2(int ecg)
 {
@@ -1279,8 +1410,9 @@ int FilterNotch50HzQ2(int ecg)
 
 //-------------------------------------------------------------------------
 // FilterNotch60Hz
-//   Notch Filter 60Hz
-//   Q = 1
+//   filter the ECG 
+//     Notch Filter 60Hz
+//     Q = 1
 //-------------------------------------------------------------------------
 int FilterNotch60Hz(int ecg)
 {
@@ -1334,6 +1466,7 @@ long read3V3(void) {
 
 //-------------------------------------------------------------------------
 // CheckBattery
+//   warn if the Battery is low
 //-------------------------------------------------------------------------
 void CheckBattery(void)
 {
@@ -1353,8 +1486,6 @@ void CheckBattery(void)
       ILI9341SetCursor(xBatt + 4, yBatt + 15);
       DrawStringF(F("Batt"), LargeFont, TFT_WHITE);
     }
-    //      ILI9341SetCursor(xBatt+2, yBatt+15);
-    //      DrawInt(maxBatt, LargeFont, TFT_WHITE);
     maxBatt = 0;
   }
 }
@@ -1369,7 +1500,6 @@ void setup(void)
 
   pinMode(ECG_IN, INPUT);
   analogReference(EXTERNAL);
-  //  XanalogRead(ECG_IN); // initialise ADC to read input
 
   pinMode(BUTTON_IN, INPUT_PULLUP);
   pinMode(LO_P_IN, INPUT);
@@ -1384,13 +1514,13 @@ void setup(void)
 #endif
 
   ILI9341Begin(TFT_CS, TFT_CD, TFT_RST, TFT_WIDTH, TFT_HEIGHT, ILI9341_Rotation3);
+  ILI9341fast = true;
 
   DrawGrid();
 }
 
 //-----------------------------------------------------------------------------
-// Main routines
-// loop
+// Main loop
 //-----------------------------------------------------------------------------
 void loop(void)
 {
@@ -1414,6 +1544,9 @@ void loop(void)
       ecg = analogRead(ECG_IN);
     #endif
 
+    if (SendingSerial)
+      Serial.print(ecg);
+
     ecg = FilterNotch50HzQ1(ecg);
     //    ecg = FilterNotch50HzQ2(ecg);
     //    ecg = FilterLowPass(ecg);
@@ -1432,12 +1565,15 @@ void loop(void)
       prev_ppg = ppg;
       if (ppgEnergy > 10000)
         ppg = -1;
-      Serial.print(ppg);
-      Serial.print(' ');
-      Serial.println(ppgEnergy);
       if ((ppg < 1000) && (PPGreceived < PPGreceivedMin))
         PPGreceived++;
+      if (SendingSerial) {
+        Serial.print(' ');
+        Serial.print(ppg);
+      }
     #endif
+    if (SendingSerial)
+      Serial.println("");
     
     #ifdef bFakeECGoutput
       MakeFakePulse();
@@ -1453,5 +1589,8 @@ void loop(void)
     CheckButton();
     CheckLeadsOff();
     CheckBattery();
+
+    if ((Serial.available()) && (Serial.read() == 'S'))
+      SendingSerial = true;
   }
 }

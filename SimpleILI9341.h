@@ -51,6 +51,7 @@ void DrawTriangle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t x
 void DrawChar(uint8_t c, word Font, uint16_t color);
 void DrawString(char * s, word Font, uint16_t color);
 void DrawStringAt(int16_t x, int16_t y, char * s, word Font, uint16_t color);
+void DrawStringF(word s, byte *Font, uint16_t color); // Draw String using the F macro to put the string in flash
 void DrawInt(int i, word Font, uint16_t color);
 void DrawFloat(float floatNumber, int dp, word Font, uint16_t color);
 void InvertDisplay(boolean i);

@@ -1234,6 +1234,23 @@ void DrawString(char * s, word Font, uint16_t color) {
   }
 }
 
+//---------------------------------------------------------------------------
+// DrawStringF
+//   Draw String at current cursor
+//    s: string to be drawn, use the F macro to put the string in flash
+//    Font: the character font
+//    color: the color it is to be drawn
+//---------------------------------------------------------------------------
+void DrawStringF(word s, byte *Font, uint16_t color) {
+  while (true) {
+    char c = pgm_read_byte_near(s);
+    s++;
+    if (c == 0)
+      return;
+    DrawChar(c, Font, color);
+  }
+}
+
 void DrawStringAt(int16_t x, int16_t y, char * s, word Font, uint16_t color) {
   ILI9341SetCursor(x, y);
   DrawString(s, Font, color);
